@@ -145,6 +145,7 @@ pub enum ListWriteFlags {
     /// Partial means: allow other valid list items to be committed if a list item fails due to
     /// write flag constraints.
     Partial = 8,
+    AddUniqueNoFailPartial = Self::AddUnique as u8 | Self::NoFail as u8 | Self::Partial as u8,
 }
 
 /// `ListPolicy` directives when creating a list and writing list items.
