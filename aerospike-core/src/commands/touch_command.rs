@@ -23,7 +23,7 @@ use crate::net::Connection;
 use crate::policy::WritePolicy;
 use crate::{Key, ResultCode};
 
-pub struct TouchCommand<'a> {
+pub(crate) struct TouchCommand<'a> {
     single_command: SingleCommand<'a>,
     policy: &'a WritePolicy,
 }
@@ -31,7 +31,7 @@ pub struct TouchCommand<'a> {
 impl<'a> TouchCommand<'a> {
     pub fn new(policy: &'a WritePolicy, cluster: Arc<Cluster>, key: &'a Key) -> Self {
         TouchCommand {
-            single_command: SingleCommand::new(cluster, key),
+            single_command: SingleCommand::new(cluster, key, crate::policy::Replica::Master),
             policy,
         }
     }
@@ -60,7 +60,7 @@ impl<'a> Command for TouchCommand<'a> {
         conn.buffer.set_touch(self.policy, self.single_command.key)
     }
 
-    async fn get_node(&self) -> Result<Arc<Node>> {
+    async fn get_node(&mut self) -> Result<Arc<Node>> {
         self.single_command.get_node().await
     }
 

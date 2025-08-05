@@ -14,7 +14,7 @@
 // the License.
 
 use crate::expressions::FilterExpression;
-use crate::policy::{BasePolicy, PolicyLike};
+use crate::policy::{BasePolicy, PolicyLike, QueryDuration};
 
 /// `QueryPolicy` encapsulates parameters for query operations.
 #[derive(Debug, Clone)]
@@ -33,8 +33,22 @@ pub struct QueryPolicy {
     /// the queue is full, the producer threads will block until records are consumed.
     pub record_queue_size: usize,
 
+    /// Limits returned records per second (rps) rate for each server node.
+    /// It does not apply rps limit if `records_per_second` is zero (default).
+    //
+    /// `records_per_second` is supported in all primary and secondary index
+    /// queries in server versions 6.0+. For background queries, `records_per_second`
+    /// is bounded by the server config `background-query-max-rps`.
+    pub records_per_second: u32,
+
     /// Terminate query if cluster is in fluctuating state.
     pub fail_on_cluster_change: bool,
+
+    /// Expected query duration. The server treats the query in different ways depending on the expected duration.
+    /// This field is ignored for aggregation queries, background queries and server versions < 6.0.
+    ///
+    /// Default: QueryDuration::Long
+    pub expected_duration: QueryDuration,
 
     /// Optional Filter Expression
     pub filter_expression: Option<FilterExpression>,
@@ -57,8 +71,10 @@ impl Default for QueryPolicy {
         QueryPolicy {
             base_policy: BasePolicy::default(),
             max_concurrent_nodes: 0,
+            records_per_second: 0,
             record_queue_size: 1024,
             fail_on_cluster_change: true,
+            expected_duration: QueryDuration::Long,
             filter_expression: None,
         }
     }

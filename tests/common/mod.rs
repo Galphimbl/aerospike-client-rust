@@ -25,10 +25,12 @@ use aerospike::{Client, ClientPolicy};
 
 lazy_static! {
     static ref AEROSPIKE_HOSTS: String =
-        env::var("AEROSPIKE_HOSTS").unwrap_or_else(|_| String::from("127.0.0.1"));
+        env::var("AEROSPIKE_HOSTS").unwrap_or_else(|_| String::from("127.0.0.1:3102"));
     static ref AEROSPIKE_NAMESPACE: String =
         env::var("AEROSPIKE_NAMESPACE").unwrap_or_else(|_| String::from("test"));
     static ref AEROSPIKE_CLUSTER: Option<String> = env::var("AEROSPIKE_CLUSTER").ok();
+    static ref AEROSPIKE_USE_SERVICES_ALTERNATE: bool =
+        env::var("AEROSPIKE_USE_SERVICES_ALTERNATE").is_ok();
     static ref GLOBAL_CLIENT_POLICY: ClientPolicy = {
         let mut policy = ClientPolicy::default();
         if let Ok(user) = env::var("AEROSPIKE_USER") {
@@ -36,6 +38,7 @@ lazy_static! {
             policy.set_user_password(user, password).unwrap();
         }
         policy.cluster_name = AEROSPIKE_CLUSTER.clone();
+        policy.use_services_alternate = AEROSPIKE_USE_SERVICES_ALTERNATE.clone();
         policy
     };
 }
@@ -61,4 +64,37 @@ pub async fn client() -> Client {
 pub fn rand_str(sz: usize) -> String {
     let rng = rand::thread_rng();
     rng.sample_iter(&Alphanumeric).take(sz).collect()
+}
+
+pub async fn enterprise_edition() -> bool {
+    let client = client().await;
+    let node = client.cluster.get_random_node().await;
+    if let Err(_) = node {
+        return false;
+    }
+    let node = node.unwrap();
+    let edition = node.info(&vec!["edition"]).await;
+    if let Err(_) = edition {
+        return false;
+    }
+
+    if let Some(edition) = edition.unwrap().get("edition") {
+        return edition.to_lowercase().contains("enterprise");
+    }
+
+    false
+}
+
+pub async fn security_enabled() -> bool {
+    if !enterprise_edition().await {
+        return false;
+    }
+
+    let client = client().await;
+    let roles = client.query_users(None).await;
+    if let Err(_) = roles {
+        return false;
+    }
+
+    true
 }

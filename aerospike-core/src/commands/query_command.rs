@@ -22,7 +22,7 @@ use crate::net::Connection;
 use crate::policy::QueryPolicy;
 use crate::{Recordset, Statement};
 
-pub struct QueryCommand<'a> {
+pub(crate) struct QueryCommand<'a> {
     stream_command: StreamCommand,
     policy: &'a QueryPolicy,
     statement: Arc<Statement>,
@@ -75,7 +75,7 @@ impl<'a> Command for QueryCommand<'a> {
         )
     }
 
-    async fn get_node(&self) -> Result<Arc<Node>> {
+    async fn get_node(&mut self) -> Result<Arc<Node>> {
         self.stream_command.get_node().await
     }
 

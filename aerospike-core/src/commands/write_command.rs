@@ -24,7 +24,7 @@ use crate::operations::OperationType;
 use crate::policy::WritePolicy;
 use crate::{Bin, Key, ResultCode};
 
-pub struct WriteCommand<'a> {
+pub(crate) struct WriteCommand<'a> {
     single_command: SingleCommand<'a>,
     policy: &'a WritePolicy,
     bins: &'a [Bin],
@@ -40,7 +40,7 @@ impl<'a> WriteCommand<'a> {
         operation: OperationType,
     ) -> Self {
         WriteCommand {
-            single_command: SingleCommand::new(cluster, key),
+            single_command: SingleCommand::new(cluster, key, crate::policy::Replica::Master),
             bins,
             policy,
             operation,
@@ -76,7 +76,7 @@ impl<'a> Command for WriteCommand<'a> {
         )
     }
 
-    async fn get_node(&self) -> Result<Arc<Node>> {
+    async fn get_node(&mut self) -> Result<Arc<Node>> {
         self.single_command.get_node().await
     }
 

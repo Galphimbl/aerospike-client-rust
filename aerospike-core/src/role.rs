@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Priority of operations on database server.
-#[derive(Debug, Clone)]
-pub enum Priority {
-    /// Default determines that the server defines the priority.
-    Default = 0,
+use crate::Privilege;
 
-    /// Low determines that the server should run the operation in a background thread.
-    Low = 1,
+/// Role allows granular access to database entities for users.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Role {
+    /// Role name.
+    pub name: String,
 
-    /// Medium determines that the server should run the operation at medium priority.
-    Medium = 2,
+    /// List of assigned privileges.
+    pub privileges: Vec<Privilege>,
 
-    /// High determines that the server should run the operation at the highest priority.
-    High = 3,
-}
+    /// The list of allowable IP addresses.
+    pub allowlist: Vec<String>,
 
-impl Default for Priority {
-    fn default() -> Priority {
-        Priority::Default
-    }
+    /// Maximum reads per second limit for the role.
+    pub read_quota: u32,
+
+    /// Maximum writes per second limit for the role.
+    pub write_quota: u32,
 }

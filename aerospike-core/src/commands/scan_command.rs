@@ -23,7 +23,7 @@ use crate::net::Connection;
 use crate::policy::ScanPolicy;
 use crate::{Bins, Recordset};
 
-pub struct ScanCommand<'a> {
+pub(crate) struct ScanCommand<'a> {
     stream_command: StreamCommand,
     policy: &'a ScanPolicy,
     namespace: &'a str,
@@ -83,7 +83,7 @@ impl<'a> Command for ScanCommand<'a> {
         )
     }
 
-    async fn get_node(&self) -> Result<Arc<Node>> {
+    async fn get_node(&mut self) -> Result<Arc<Node>> {
         self.stream_command.get_node().await
     }
 

@@ -18,8 +18,9 @@ use std::str;
 use std::sync::Arc;
 use std::vec::Vec;
 
-use crate::batch::BatchExecutor;
+use crate::batch::{BatchExecutor, BatchOperation};
 use crate::cluster::{Cluster, Node};
+use crate::commands::admin_command::AdminCommand;
 use crate::commands::{
     DeleteCommand, ExecuteUDFCommand, ExistsCommand, OperateCommand, QueryCommand, ReadCommand,
     ScanCommand, TouchCommand, WriteCommand,
@@ -30,8 +31,8 @@ use crate::operations::{Operation, OperationType};
 use crate::policy::{BatchPolicy, ClientPolicy, QueryPolicy, ReadPolicy, ScanPolicy, WritePolicy};
 use crate::task::{IndexTask, RegisterTask};
 use crate::{
-    BatchRead, Bin, Bins, CollectionIndexType, IndexType, Key, Record, Recordset, ResultCode,
-    Statement, UDFLang, Value,
+    BatchRecord, Bin, Bins, CollectionIndexType, IndexType, Key, Privilege, Record, Recordset,
+    ResultCode, Role, Statement, UDFLang, User, Value,
 };
 use aerospike_rt::fs::File;
 #[cfg(all(any(feature = "rt-tokio"), not(feature = "rt-async-std")))]
@@ -53,6 +54,7 @@ use futures::AsyncReadExt;
 /// "single-bin". In "multi-bin" mode, partial records may be written or read by specifying the
 /// relevant subset of bins.
 pub struct Client {
+    /// Cluster management object.
     pub cluster: Arc<Cluster>,
 }
 
@@ -87,7 +89,7 @@ impl Client {
     ///
     /// Using an environment variable to set the list of seed hosts.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// use aerospike::{Client, ClientPolicy};
     ///
     /// let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -139,7 +141,7 @@ impl Client {
     ///
     /// Fetch specified bins for a record with the given key.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -148,16 +150,17 @@ impl Client {
     /// match client.get(&ReadPolicy::default(), &key, ["a", "b"]).await {
     ///     Ok(record)
     ///         => println!("a={:?}", record.bins.get("a")),
-    ///     Err(Error::ServerError(ResultCode::KeyNotFoundError))
+    ///     Err(Error::ServerError(ResultCode::KeyNotFoundError,..))
     ///         => println!("No such record: {}", key),
     ///     Err(err)
     ///         => println!("Error fetching record: {}", err),
     /// }
+
     /// ```
     ///
     /// Determine the remaining time-to-live of a record.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -170,11 +173,12 @@ impl Client {
     ///             Some(duration) => println!("ttl: {} secs", duration.as_secs()),
     ///         }
     ///     },
-    ///     Err(Error::ServerError(ResultCode::KeyNotFoundError))
+    ///     Err(Error::ServerError(ResultCode::KeyNotFoundError,..))
     ///         => println!("No such record: {}", key),
     ///     Err(err)
     ///         => println!("Error fetching record: {}", err),
     /// }
+
     /// ```
     ///
     /// # Panics
@@ -184,7 +188,13 @@ impl Client {
         T: Into<Bins> + Send + Sync + 'static,
     {
         let bins = bins.into();
-        let mut command = ReadCommand::new(policy, self.cluster.clone(), key, bins);
+        let mut command = ReadCommand::new(
+            &policy.base_policy,
+            self.cluster.clone(),
+            key,
+            bins,
+            policy.replica,
+        );
         command.execute().await?;
         Ok(command.record.unwrap())
     }
@@ -199,21 +209,59 @@ impl Client {
     ///
     /// Fetch multiple records in a single client request
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
     /// # let client = Client::new(&ClientPolicy::default(), &hosts).await.unwrap();
     /// let bins = Bins::from(["name", "age"]);
-    /// let mut batch_reads = vec![];
-    /// for i in 0..10 {
-    ///   let key = as_key!("test", "test", i);
-    ///   batch_reads.push(BatchRead::new(key, bins.clone()));
-    /// }
-    /// match client.batch_get(&BatchPolicy::default(), batch_reads).await {
+    /// let mut batch_ops = vec![];
+    /// let bin1 = as_bin!("a", "a value");
+    /// let bin2 = as_bin!("b", "another value");
+    /// let bin3 = as_bin!("c", 42);
+    ///
+    /// let key1 = as_key!("test", "test", 1);
+    /// let key2 = as_key!("test", "test", 2);
+    /// let key3 = as_key!("test", "test", 3);
+    ///
+    /// let key4 = as_key!("test", "test", -1);
+    /// key does not exist
+    ///
+    /// let selected = Bins::from(["a"]);
+    /// let all = Bins::All;
+    /// let none = Bins::None;
+    ///
+    /// let wops = vec![
+    ///     operations::put(&bin1),
+    ///     operations::put(&bin2),
+    ///     operations::put(&bin3),
+    /// ];
+    ///
+    /// let rops = vec![
+    ///     operations::get_bin(&bin1.name),
+    ///     operations::get_bin(&bin2.name),
+    ///     operations::get_header(),
+    /// ];
+    ///
+    /// let bpr = BatchReadPolicy::default();
+    /// let bpw = BatchWritePolicy::default();
+    /// let bpd = BatchDeletePolicy::default();
+    /// let bpu = BatchUDFPolicy::default();
+    ///
+    /// let batch = vec![
+    ///     BatchOperation::write(&bpw, key1.clone(), wops.clone()),
+    ///     BatchOperation::read(&bpr, key1.clone(), selected),
+    ///     BatchOperation::read(&bpr, key2.clone(), all),
+    ///     BatchOperation::read(&bpr, key3.clone(), none.clone()),
+    ///     BatchOperation::read_ops(&bpr, key3.clone(), rops),
+    ///     BatchOperation::delete(&bpd, key1.clone()),
+    ///     BatchOperation::udf(&bpu, key1.clone(), "test_udf", "echo", Some(args)),
+    /// ];
+    /// let mut results = client.batch(&bpolicy, &batch).await.unwrap();
+    /// match results {
     ///     Ok(results) => {
     ///       for result in results {
-    ///         match result.record {
+    ///         match result.batch_record().record {
     ///           Some(record) => println!("{:?} => {:?}", result.key, record.bins),
     ///           None => println!("No such record: {:?}", result.key),
     ///         }
@@ -223,13 +271,13 @@ impl Client {
     ///         => println!("Error executing batch request: {}", err),
     /// }
     /// ```
-    pub async fn batch_get(
+    pub async fn batch(
         &self,
         policy: &BatchPolicy,
-        batch_reads: Vec<BatchRead>,
-    ) -> Result<Vec<BatchRead>> {
+        batch_records: &[BatchOperation<'_>],
+    ) -> Result<Vec<BatchRecord>> {
         let executor = BatchExecutor::new(self.cluster.clone());
-        executor.execute_batch_read(policy, batch_reads).await
+        executor.execute_batch_operate(policy, batch_records).await
     }
 
     /// Write record bin(s). The policy specifies the transaction timeout, record expiration and
@@ -239,7 +287,7 @@ impl Client {
     ///
     /// Write a record with a single integer bin.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -254,7 +302,7 @@ impl Client {
     ///
     /// Write a record with an expiration of 10 seconds.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -287,7 +335,7 @@ impl Client {
     ///
     /// Add two integer values to two existing bin values.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -342,7 +390,7 @@ impl Client {
     ///
     /// Delete a record.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -367,7 +415,7 @@ impl Client {
     ///
     /// Reset a record's time to expiration to the default ttl for the namespace.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -403,7 +451,7 @@ impl Client {
     /// Add an integer value to an existing record and then read the result, all in one database
     /// call.
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # use aerospike::*;
     ///
     /// # let hosts = std::env::var("AEROSPIKE_HOSTS").unwrap();
@@ -441,7 +489,7 @@ impl Client {
     ///
     /// # Examples
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # extern crate aerospike;
     /// # use aerospike::*;
     ///
@@ -598,7 +646,7 @@ impl Client {
     ///
     /// # Examples
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # extern crate aerospike;
     /// # use aerospike::*;
     ///
@@ -704,7 +752,7 @@ impl Client {
     ///
     /// # Examples
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # extern crate aerospike;
     /// # use aerospike::*;
     ///
@@ -824,7 +872,7 @@ impl Client {
     /// The following example creates an index `idx_foo_bar_baz`. The index is in namespace `foo`
     /// within set `bar` and bin `baz`:
     ///
-    /// ```rust,edition2018
+    /// ```rust,edition2021
     /// # extern crate aerospike;
     /// # use aerospike::*;
     ///
@@ -928,5 +976,112 @@ impl Client {
         return Err(Error::BadResponse(
             "Unexpected sindex info command response".to_string(),
         ));
+    }
+
+    /// Creates a new user with password and roles. Clear-text password will be hashed using bcrypt
+    /// before sending to server.
+    pub async fn create_user(&self, user: &str, password: &str, roles: &[&str]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::create_user(&cluster, user, password, roles).await
+    }
+
+    /// Removes a user from the cluster.
+    pub async fn drop_user(&self, user: &str) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::drop_user(&cluster, user).await
+    }
+
+    /// Changes a user's password. Clear-text password will be hashed using bcrypt before sending to server.
+    pub async fn change_password(&self, user: &str, password: &str) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::change_password(&cluster, user, password).await
+    }
+
+    /// Adds roles to user's list of roles.
+    pub async fn grant_roles(&self, user: &str, roles: &[&str]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::grant_roles(&cluster, user, roles).await
+    }
+
+    /// Removes roles from user's list of roles.
+    pub async fn revoke_roles(&self, user: &str, roles: &[&str]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::revoke_roles(&cluster, user, roles).await
+    }
+
+    /// Retrieves users and their roles.
+    /// If None is passed for the user argument, all users will be returned.
+    pub async fn query_users(&self, user: Option<&str>) -> Result<Vec<User>> {
+        let cluster = self.cluster.clone();
+        AdminCommand::query_users(&cluster, user).await
+    }
+
+    /// Retrieves roles and their privileges.
+    /// If None is passed for the role argument, all roles will be returned.
+    pub async fn query_roles(&self, role: Option<&str>) -> Result<Vec<Role>> {
+        let cluster = self.cluster.clone();
+        AdminCommand::query_roles(&cluster, role).await
+    }
+
+    /// Creates a user-defined role.
+    /// Quotas require server security configuration "enable-quotas" to be set to true.
+    /// Pass 0 for quota values for no limit.
+    pub async fn create_role(
+        &self,
+        role_name: &str,
+        privileges: &[Privilege],
+        allowlist: &[&str],
+        read_quota: u32,
+        write_quota: u32,
+    ) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::create_role(
+            &cluster,
+            role_name,
+            privileges,
+            allowlist,
+            read_quota,
+            write_quota,
+        )
+        .await
+    }
+
+    /// Removes a user-defined role.
+    pub async fn drop_role(&self, role_name: &str) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::drop_role(&cluster, role_name).await
+    }
+
+    /// Grants privileges to a user-defined role.
+    pub async fn grant_privileges(&self, role_name: &str, privileges: &[Privilege]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::grant_privileges(&cluster, role_name, privileges).await
+    }
+
+    /// Revokes privileges from a user-defined role.
+    pub async fn revoke_privileges(&self, role_name: &str, privileges: &[Privilege]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::revoke_privileges(&cluster, role_name, privileges).await
+    }
+
+    /// Sets IP address allowlist for a role.
+    /// If allowlist is nil or empty, it removes existing allowlist from role.
+    pub async fn set_allowlist(&self, role_name: &str, allowlist: &[&str]) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::set_allowlist(&cluster, role_name, allowlist).await
+    }
+
+    /// Sets maximum reads/writes per second limits for a role.
+    /// If a quota is zero, the limit is removed.
+    /// Quotas require server security configuration "enable-quotas" to be set to true.
+    /// Pass 0 for quota values for no limit.
+    pub async fn set_quotas(
+        &self,
+        role_name: &str,
+        read_quota: u32,
+        write_quota: u32,
+    ) -> Result<()> {
+        let cluster = self.cluster.clone();
+        AdminCommand::set_quotas(&cluster, role_name, read_quota, write_quota).await
     }
 }

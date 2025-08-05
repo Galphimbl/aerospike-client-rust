@@ -23,7 +23,7 @@ use crate::net::Connection;
 use crate::policy::WritePolicy;
 use crate::{Bins, Key, Value};
 
-pub struct ExecuteUDFCommand<'a> {
+pub(crate) struct ExecuteUDFCommand<'a> {
     pub read_command: ReadCommand<'a>,
     policy: &'a WritePolicy,
     package_name: &'a str,
@@ -41,7 +41,13 @@ impl<'a> ExecuteUDFCommand<'a> {
         args: Option<&'a [Value]>,
     ) -> Self {
         ExecuteUDFCommand {
-            read_command: ReadCommand::new(&policy.base_policy, cluster, key, Bins::All),
+            read_command: ReadCommand::new(
+                &policy.base_policy,
+                cluster,
+                key,
+                Bins::All,
+                crate::policy::Replica::Master,
+            ),
             policy,
             package_name,
             function_name,
@@ -79,7 +85,7 @@ impl<'a> Command for ExecuteUDFCommand<'a> {
         )
     }
 
-    async fn get_node(&self) -> Result<Arc<Node>> {
+    async fn get_node(&mut self) -> Result<Arc<Node>> {
         self.read_command.get_node().await
     }
 

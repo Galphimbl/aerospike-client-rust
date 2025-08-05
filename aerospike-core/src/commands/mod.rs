@@ -13,41 +13,43 @@
 // limitations under the License.
 
 pub mod admin_command;
-pub mod batch_read_command;
-pub mod buffer;
-pub mod delete_command;
-pub mod execute_udf_command;
-pub mod exists_command;
-pub mod info_command;
-pub mod operate_command;
-pub mod particle_type;
-pub mod query_command;
-pub mod read_command;
-pub mod scan_command;
-pub mod single_command;
-pub mod stream_command;
-pub mod touch_command;
-pub mod write_command;
+pub(crate) mod batch_attr;
+pub(crate) mod batch_operate_command;
+pub(crate) mod buffer;
+pub(crate) mod delete_command;
+pub(crate) mod execute_udf_command;
+pub(crate) mod exists_command;
+pub(crate) mod info_command;
+pub(crate) mod operate_command;
+pub(crate) mod particle_type;
+pub(crate) mod query_command;
+pub(crate) mod read_command;
+pub(crate) mod scan_command;
+pub(crate) mod single_command;
+pub(crate) mod stream_command;
+pub(crate) mod touch_command;
+pub(crate) mod write_command;
 
 mod field_type;
 
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use self::batch_read_command::BatchReadCommand;
-pub use self::delete_command::DeleteCommand;
-pub use self::execute_udf_command::ExecuteUDFCommand;
-pub use self::exists_command::ExistsCommand;
-pub use self::info_command::Message;
-pub use self::operate_command::OperateCommand;
-pub use self::particle_type::ParticleType;
-pub use self::query_command::QueryCommand;
-pub use self::read_command::ReadCommand;
-pub use self::scan_command::ScanCommand;
-pub use self::single_command::SingleCommand;
-pub use self::stream_command::StreamCommand;
-pub use self::touch_command::TouchCommand;
-pub use self::write_command::WriteCommand;
+pub(crate) use self::batch_attr::BatchAttr;
+pub(crate) use self::batch_operate_command::BatchOperateCommand;
+pub(crate) use self::delete_command::DeleteCommand;
+pub(crate) use self::execute_udf_command::ExecuteUDFCommand;
+pub(crate) use self::exists_command::ExistsCommand;
+pub(crate) use self::info_command::Message;
+pub(crate) use self::operate_command::OperateCommand;
+pub(crate) use self::particle_type::ParticleType;
+pub(crate) use self::query_command::QueryCommand;
+pub(crate) use self::read_command::ReadCommand;
+pub(crate) use self::scan_command::ScanCommand;
+pub(crate) use self::single_command::SingleCommand;
+pub(crate) use self::stream_command::StreamCommand;
+pub(crate) use self::touch_command::TouchCommand;
+pub(crate) use self::write_command::WriteCommand;
 
 use crate::cluster::Node;
 use crate::errors::{Error, Result};
@@ -56,18 +58,18 @@ use crate::ResultCode;
 
 // Command interface describes all commands available
 #[async_trait::async_trait]
-pub trait Command {
+pub(crate) trait Command {
     async fn write_timeout(
         &mut self,
         conn: &mut Connection,
         timeout: Option<Duration>,
     ) -> Result<()>;
     fn prepare_buffer(&mut self, conn: &mut Connection) -> Result<()>;
-    async fn get_node(&self) -> Result<Arc<Node>>;
+    async fn get_node(&mut self) -> Result<Arc<Node>>;
     async fn parse_result(&mut self, conn: &mut Connection) -> Result<()>;
     async fn write_buffer(&mut self, conn: &mut Connection) -> Result<()>;
 }
 
-pub const fn keep_connection(err: &Error) -> bool {
+pub(crate) const fn keep_connection(err: &Error) -> bool {
     matches!(err, Error::ServerError(ResultCode::KeyNotFoundError, _, _))
 }

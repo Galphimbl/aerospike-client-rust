@@ -138,7 +138,8 @@
 extern crate base64;
 extern crate byteorder;
 extern crate crossbeam_queue;
-extern crate ripemd160;
+#[macro_use]
+extern crate rhexdump;
 #[macro_use]
 extern crate thiserror;
 #[macro_use]
@@ -148,7 +149,12 @@ extern crate log;
 extern crate pwhash;
 extern crate rand;
 
-pub use batch::BatchRead;
+pub use batch::BatchDeletePolicy;
+pub use batch::BatchOperation;
+pub use batch::BatchReadPolicy;
+pub use batch::BatchRecord;
+pub use batch::BatchUDFPolicy;
+pub use batch::BatchWritePolicy;
 pub use bin::{Bin, Bins};
 pub use client::Client;
 pub use cluster::Node;
@@ -161,12 +167,14 @@ pub use net::ToHosts;
 pub use operations::{MapPolicy, MapReturnType, MapWriteMode};
 pub use policy::{
     BatchPolicy, ClientPolicy, CommitLevel, Concurrency, ConsistencyLevel, Expiration,
-    GenerationPolicy, Policy, Priority, QueryPolicy, ReadPolicy, RecordExistsAction, ScanPolicy,
-    WritePolicy,
+    GenerationPolicy, Policy, QueryDuration, QueryPolicy, ReadPolicy, ReadTouchTTL,
+    RecordExistsAction, ScanPolicy, WritePolicy,
 };
+pub use privilege::{Privilege, PrivilegeCode};
 pub use query::{CollectionIndexType, IndexType, Recordset, Statement, UDFLang};
 pub use record::Record;
 pub use result_code::ResultCode;
+pub use role::Role;
 pub use task::{IndexTask, RegisterTask, Task};
 pub use user::User;
 pub use value::{FloatValue, Value};
@@ -182,15 +190,17 @@ mod key;
 mod batch;
 mod client;
 mod cluster;
-pub mod commands;
+pub(crate) mod commands;
 pub mod expressions;
 mod msgpack;
 mod net;
 pub mod operations;
 pub mod policy;
+mod privilege;
 pub mod query;
 mod record;
 mod result_code;
+mod role;
 pub mod task;
 mod user;
 

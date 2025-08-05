@@ -2,7 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.0.0-alpha.3]
+
+* **New Features**
+  * [CLIENT-3105] Add newer error codes to the client.
+  * [CLIENT-2052] Support new 6.0 `truncate`, `udf-admin`, and `sindex-admin` privileges.
+  * [CLIENT-2100] Support user quotas and statistics and newer API.
+
+## [2.0.0-alpha.2]
+
+* **New Features**
+  * [CLIENT-2046] Add `Exists`, `OrderedMap` and `UnorderedMap` return types for CDT read operations.
+  * [CLIENT-2385] Add support for `Infinity` and `Wildcard` values.
+  * [CLIENT-2309] Add support for `expressions::infinity()` and `expressions::wildcard()`.
+  * [CLIENT-2576] Support `expressions::record_size()` and `expressions::memory_size()`.
+  * [CLIENT-3491] Add `allow_inline_ssd`, `respond_all_keys` to `BatchPolicy`.
+  * [CLIENT-2832] Add `read_touch_ttl` to policies.
+  * [CLIENT-2825] Support `QueryDuration` enum in `QueryPolicy`.
+  * [CLIENT-3488] Support `records_per_second` for Scan/Query.
+
+* **Bug Fixes**
+  * Fix build issue on crates.io
+
+## [2.0.0-alpha.1]
+We are pleased to release the first alpha version of the next gen v2 for the Rust client.
+This version of the client comes with a major feature: `async`! This feature was started by [Jonas Breuer](https://github.com/jonas32), in his epic PR and fixed and extended by Aerospike. We would like to thank him for his amazing contribution. Others also opened PRs which we have accepted and merged into this release.
+
+Please keep in mind that the API is still unstable and we *WILL* break it to enhance ergonomics, feature-set and the performance of the library. We invite the community to test drive the library and file tickets for bug reports or enhancement either on `Github` or with Aerospike support.
+
+* **New Features**
+  * Support `async` rust. You can use both `tokio` and `async-std` as features to enable the respective runtimes. `tokio` is the default.
+  * Support `sync` through blocking in the `sync` sub-crate.
+  * [CLIENT-2051] Support new batch protocol, allowing `read`, `write`, `delete` and `udf` operations. Use `BatchOperation` constructors.
+  * [CLIENT-2321] Support queries and scans not sending a fresh message header per partition in server v6+.
+  * [CLIENT-2320] Implement `std::convert::TryFrom<aerospike::Value>` for each variant.
+  * [CLIENT-2099] Support `boolean` particle type.
+  * Support New Scan/Query wire protocol.
+  * Replace `error-chain` with a custom implementation. We still use `thiserror`'s macros internally (To be removed in the future.)
+  * Support for `Replica` policies, including `PreferRack` policy.
+  * Removes lifetimes that were due to `&str`, replacing most of them with `String`.
+
+* **Bug Fixes**
+  * Fixed various bugs in `messagepack` encoding.
+  * Fixed large integers packing when encoding to `messagepack`.
+  * Fixed `Float` serialization.
 
 ## [1.2.0] - 2021-10-22
 
@@ -13,7 +56,7 @@ All notable changes to this project will be documented in this file.
   * Fix for buffer size when using CDT contexts. Thanks to [Jonas Breuer](https://github.com/jonas32)
 
 ## [1.1.0] - 2021-10-12
-This version of the client drops support for the older server versions without changing the API. `ScanPolicy.fail_on_cluster_change`, `ScanPolicy.scan_percent` and `BasePolicy.priority` are deprected for the Scan operations and will not be sent to the server. They remain in the API to avoid breaking the API.
+This version of the client drops support for the older server versions without changing the API. `ScanPolicy.fail_on_cluster_change`, `ScanPolicy.scan_percent` and `BasePolicy.priority` are deprecated for the Scan operations and will not be sent to the server. They remain in the API to avoid breaking the API.
 
 * **New Features**
   * Support Aerospike server v5.6+ server authentication.

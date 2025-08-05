@@ -16,6 +16,8 @@
 //! Expression Operations.
 //! This functions allow users to run `FilterExpressions` as Operate commands.
 
+use std::sync::Arc;
+
 use crate::commands::buffer::Buffer;
 use crate::expressions::FilterExpression;
 use crate::msgpack::encoder::{pack_array_begin, pack_integer};
@@ -23,6 +25,7 @@ use crate::operations::{Operation, OperationBin, OperationData, OperationType};
 use crate::ParticleType;
 
 /// Expression write Flags
+#[derive(Clone, Copy)]
 pub enum ExpWriteFlags {
     /// Default. Allow create or update.
     Default = 0,
@@ -43,10 +46,33 @@ pub enum ExpWriteFlags {
     EvalNoFail = 1 << 4,
 }
 
+/// Something that can be resolved into a set of ExpWriteFlags. Either a single ExpWriteFlag, Option<ExpWriteFlag>, [ExpWriteFlag], etc.
+pub trait ToExpWriteFlagBitmask {
+    /// Convert to an i64 bitmask
+    fn to_bitmask(self) -> i64;
+}
+
+impl ToExpWriteFlagBitmask for ExpWriteFlags {
+    fn to_bitmask(self) -> i64 {
+        self as i64
+    }
+}
+
+impl<T: IntoIterator<Item = ExpWriteFlags>> ToExpWriteFlagBitmask for T {
+    fn to_bitmask(self) -> i64 {
+        let mut out = 0;
+        for val in self {
+            out |= val.to_bitmask();
+        }
+        out
+    }
+}
+
 #[doc(hidden)]
 pub type ExpressionEncoder =
-    Box<dyn Fn(&mut Option<&mut Buffer>, &ExpOperation) -> usize + Send + Sync + 'static>;
+    Arc<dyn Fn(&mut Option<&mut Buffer>, &ExpOperation) -> usize + Send + Sync + 'static>;
 
+#[derive(Clone)]
 #[doc(hidden)]
 pub struct ExpOperation<'a> {
     pub encoder: ExpressionEncoder,
@@ -79,15 +105,37 @@ pub enum ExpReadFlags {
     EvalNoFail = 1 << 4,
 }
 
+/// Something that can be resolved into a set of ExpWriteFlags. Either a single ExpWriteFlag, Option<ExpWriteFlag>, [ExpWriteFlag], etc.
+pub trait ToExpReadFlagBitmask {
+    /// Convert to an i64 bitmask
+    fn to_bitmask(self) -> i64;
+}
+
+impl ToExpReadFlagBitmask for ExpReadFlags {
+    fn to_bitmask(self) -> i64 {
+        self as i64
+    }
+}
+
+impl<T: IntoIterator<Item = ExpReadFlags>> ToExpReadFlagBitmask for T {
+    fn to_bitmask(self) -> i64 {
+        let mut out = 0;
+        for val in self {
+            out |= val.to_bitmask();
+        }
+        out
+    }
+}
+
 /// Create operation that performs a expression that writes to record bin.
-pub fn write_exp<'a>(
+pub fn write_exp<'a, E: ToExpWriteFlagBitmask>(
     bin: &'a str,
     exp: &'a FilterExpression,
-    flags: ExpWriteFlags,
+    flags: E,
 ) -> Operation<'a> {
     let op = ExpOperation {
-        encoder: Box::new(pack_write_exp),
-        policy: flags as i64,
+        encoder: Arc::new(pack_write_exp),
+        policy: flags.to_bitmask(),
         exp,
     };
     Operation {
@@ -99,14 +147,14 @@ pub fn write_exp<'a>(
 }
 
 /// Create operation that performs a read expression.
-pub fn read_exp<'a>(
+pub fn read_exp<'a, E: ToExpReadFlagBitmask>(
     name: &'a str,
     exp: &'a FilterExpression,
-    flags: ExpReadFlags,
+    flags: E,
 ) -> Operation<'a> {
     let op = ExpOperation {
-        encoder: Box::new(pack_read_exp),
-        policy: flags as i64,
+        encoder: Arc::new(pack_read_exp),
+        policy: flags.to_bitmask(),
         exp,
     };
     Operation {
