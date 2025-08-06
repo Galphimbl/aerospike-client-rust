@@ -123,6 +123,8 @@ impl Queue {
             let mut internals = self.0.internals.lock().await;
             internals.num_conns -= 1;
         }
+        conn.buffer.data_buffer.clear();
+        conn.buffer.reset_offset();
         conn.close().await;
     }
 
