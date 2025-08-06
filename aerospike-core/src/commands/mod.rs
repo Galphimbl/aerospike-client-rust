@@ -73,8 +73,7 @@ pub(crate) trait Command {
 pub(crate) const fn keep_connection(err: &Error) -> bool {
     matches!(
         err,
-        Error::ServerError(ResultCode::KeyNotFoundError, _, _)
-            | Error::ServerError(ResultCode::ElementExists, _, _)
-            | Error::ServerError(ResultCode::KeyExistsError, _, _)
+        Error::ServerError(ResultCode::KeyNotFoundError, _, _) // | Error::ServerError(ResultCode::ElementExists, _, _)
+                                                               // | Error::ServerError(ResultCode::KeyExistsError, _, _)
     )
 }
