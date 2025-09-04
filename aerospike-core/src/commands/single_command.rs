@@ -118,6 +118,7 @@ impl<'a> SingleCommand<'a> {
             };
 
             // clear buffer before sending the command
+            conn.flush();
             conn.buffer.data_buffer.clear();
             conn.buffer.reset_offset();
 
