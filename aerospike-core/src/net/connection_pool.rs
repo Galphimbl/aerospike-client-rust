@@ -143,9 +143,9 @@ impl Clone for Queue {
 
 #[derive(Debug)]
 pub struct ConnectionPool {
-    num_queues: usize,
-    queues: Vec<Queue>,
-    queue_counter: AtomicUsize,
+    pub num_queues: usize,
+    pub queues: Vec<Queue>,
+    pub queue_counter: AtomicUsize,
 }
 
 impl ConnectionPool {

@@ -42,7 +42,7 @@ pub struct Node {
     aliases: RwLock<Vec<Host>>,
     address: String,
 
-    connection_pool: ConnectionPool,
+    pub connection_pool: ConnectionPool,
     failures: AtomicUsize,
 
     partition_generation: AtomicIsize,
