@@ -117,11 +117,6 @@ impl<'a> SingleCommand<'a> {
                 }
             };
 
-            // clear buffer before sending the command
-            conn.flush().await?;
-            conn.buffer.data_buffer.clear();
-            conn.buffer.reset_offset();
-
             cmd.prepare_buffer(&mut conn)
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
             cmd.write_timeout(&mut conn, policy.timeout())
