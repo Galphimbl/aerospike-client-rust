@@ -342,7 +342,7 @@ impl Node {
             Ok(conn) => conn,
             Err(e) => {
                 log::warn!("Failed to get connection to node {}: {}", self, e);
-                return e;
+                return e.into();
             }
         };
         Message::info(&mut conn, commands).await.map_err(|e| {
