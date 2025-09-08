@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::str;
 
-use crate::errors::{Result, Error};
+use crate::errors::{Error, Result};
 use crate::net::Connection;
 
 // MAX_BUFFER_SIZE protects against allocating massive memory blocks
@@ -71,7 +71,9 @@ impl Message {
         // Corrupted data streams can result in a huge length.
         // Do a sanity check here.
         if data_len > MAX_BUFFER_SIZE {
-            return Err(Error::InvalidArgument(format!("Invalid size for info command buffer: {data_len}")));
+            return Err(Error::InvalidArgument(format!(
+                "Invalid size for info command buffer: {data_len}"
+            )));
         }
         self.buf.resize(data_len, 0);
 
@@ -82,6 +84,10 @@ impl Message {
     }
 
     fn parse_response(&self) -> Result<HashMap<String, String>> {
+        log::info!(
+            "Parsing response from server for info command. Buffer: {:?}",
+            self.buf
+        );
         let response = str::from_utf8(&self.buf)?;
         let response = response.trim_matches('\n');
 
