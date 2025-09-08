@@ -95,6 +95,16 @@ impl<'a> SingleCommand<'a> {
                 }
             }
 
+            // check for max retries
+            if let Some(max_retries) = policy.max_retries() {
+                if iterations > max_retries + 1 {  // first attempt isn't a retry
+                    return Err(Error::Connection(format!(
+                        "Timeout after {} tries",
+                        iterations
+                    )));
+                }
+            }
+
             // check for command timeout
             if let Some(deadline) = deadline {
                 if Instant::now() > deadline {
@@ -118,8 +128,9 @@ impl<'a> SingleCommand<'a> {
             };
 
             cmd.prepare_buffer(&mut conn)
+                .await
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
-            cmd.write_timeout(&mut conn, policy.timeout())
+            cmd.write_timeout(&mut conn, policy.total_timeout())
                 .await
                 .map_err(|e| e.chain_error("Failed to set timeout for send buffer"))?;
 
