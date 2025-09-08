@@ -26,16 +26,16 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 #[derive(Debug)]
-struct IdleConnection(Connection);
+pub struct IdleConnection(Connection);
 
 #[derive(Debug)]
-struct QueueInternals {
+pub struct QueueInternals {
     connections: VecDeque<IdleConnection>,
     num_conns: usize,
 }
 
 #[derive(Debug)]
-struct SharedQueue {
+pub struct SharedQueue {
     internals: Mutex<QueueInternals>,
     capacity: usize,
     host: Host,
@@ -43,7 +43,7 @@ struct SharedQueue {
 }
 
 #[derive(Debug)]
-struct Queue(Arc<SharedQueue>);
+pub struct Queue(Arc<SharedQueue>);
 
 impl Queue {
     pub fn with_capacity(capacity: usize, host: Host, policy: ClientPolicy) -> Self {
