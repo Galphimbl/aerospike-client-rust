@@ -104,10 +104,12 @@ fn unpack_blob(buf: &mut Buffer, count: usize) -> Result<Value> {
             Ok(Value::GeoJSON(val))
         }
 
-        _ => return Err(Error::BadResponse(format!(
-            "Error while unpacking BLOB. Type-header with code `{}` not recognized.",
-            vtype
-        ))),
+        _ => {
+            return Err(Error::BadResponse(format!(
+                "Error while unpacking BLOB. Type-header with code `{}` not recognized.",
+                vtype
+            )))
+        }
     }
 }
 
@@ -135,7 +137,7 @@ fn unpack_value(buf: &mut Buffer) -> Result<Value> {
             Ok(unpack_blob(buf, count as usize)?)
         }
         0xc7 => {
-            warn!("Skipping over type extension with 8 bit header and bytes");
+            // warn!("Skipping over type extension with 8 bit header and bytes");
             let count = 1 + buf.read_u8(None);
             buf.skip_bytes(count as usize);
             Ok(Value::Nil)
@@ -213,8 +215,7 @@ fn unpack_value(buf: &mut Buffer) -> Result<Value> {
             Ok(Value::from(value))
         }
         _ => Err(
-            Error::BadResponse(format!("Error unpacking value of type '{:x}'", obj_type))
-                .into(),
+            Error::BadResponse(format!("Error unpacking value of type '{:x}'", obj_type)).into(),
         ),
     }
 }

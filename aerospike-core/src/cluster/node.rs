@@ -338,8 +338,15 @@ impl Node {
 
     // Send info commands to this node
     pub async fn info(&self, commands: &[&str]) -> Result<HashMap<String, String>> {
-        let mut conn = self.get_connection().await?;
+        let mut conn = match self.get_connection().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::warn!("Failed to get connection to node {}: {}", self, e);
+                return e;
+            }
+        };
         Message::info(&mut conn, commands).await.map_err(|e| {
+            log::warn!("Failed to send info command to node {}: {}", self, e);
             conn.invalidate();
             e
         })
