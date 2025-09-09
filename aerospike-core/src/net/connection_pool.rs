@@ -245,7 +245,7 @@ impl Drop for ConnGuard<'_> {
     fn drop(&mut self) {
         // If the command future was cancelled/timed out, we never called mark_clean()
         if self.pc.dirty {
-            self.pc.mustx_close = true; // ensure socket won't be returned to pool
+            self.pc.must_close = true; // ensure socket won't be returned to pool
         }
     }
 }
