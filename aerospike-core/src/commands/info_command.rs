@@ -84,10 +84,6 @@ impl Message {
     }
 
     fn parse_response(&self) -> Result<HashMap<String, String>> {
-        log::info!(
-            "Parsing response from server for info command. Buffer: {:?}",
-            self.buf
-        );
         let response = str::from_utf8(&self.buf)?;
         let response = response.trim_matches('\n');
 
