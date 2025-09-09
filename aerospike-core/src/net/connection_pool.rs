@@ -115,6 +115,7 @@ impl Queue {
         if internals.num_conns < self.0.capacity {
             internals.connections.push_back(IdleConnection(conn));
         } else {
+            log::warn!("Connection pool is full, closing connection");
             conn.close().await;
             internals.num_conns -= 1;
         }
