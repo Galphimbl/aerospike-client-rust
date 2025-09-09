@@ -119,7 +119,7 @@ impl<'a> BatchOperateCommand<'a> {
                     continue;
                 }
             };
-
+            let _guard = conn.guard();
             self.prepare_buffer(&mut conn)
                 .await
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
@@ -131,7 +131,8 @@ impl<'a> BatchOperateCommand<'a> {
             if let Err(err) = self.write_buffer(&mut conn).await {
                 // IO errors are considered temporary anomalies. Retry.
                 // Close socket to flush out possible garbage. Do not put back in pool.
-                conn.invalidate();
+                // conn.invalidate();
+                conn.poison();
                 warn!("Node {}: {}", self.node, err);
                 continue;
             }
@@ -143,11 +144,14 @@ impl<'a> BatchOperateCommand<'a> {
                 // close the connection to throw away its data and signal the server about the
                 // situation. We will not put back the connection in the buffer.
                 if !commands::keep_connection(&err) {
-                    conn.invalidate();
+                    // conn.invalidate();
+                    conn.poison();
+                } else {
+                    conn.mark_clean();
                 }
                 return Err(err);
             }
-
+            conn.mark_clean();
             // command has completed successfully.  Exit method.
             return Ok(self);
         }
@@ -171,12 +175,13 @@ impl<'a> BatchOperateCommand<'a> {
             .map_err(|_| Error::ClientError("Failed to prepare send buffer".into()))?;
 
         conn.buffer.write_timeout(policy.base().total_timeout());
-
+        let _guard = conn.guard();
         // Send command.
         if let Err(err) = conn.flush().await {
             // IO errors are considered temporary anomalies. Retry.
             // Close socket to flush out possible garbage. Do not put back in pool.
-            conn.invalidate();
+            // conn.invalidate();
+            conn.poison();
             warn!("Node {}: {}", node, err);
             return Ok(false);
         }
@@ -188,10 +193,14 @@ impl<'a> BatchOperateCommand<'a> {
             // close the connection to throw away its data and signal the server about the
             // situation. We will not put back the connection in the buffer.
             if !commands::keep_connection(&err) {
-                conn.invalidate();
+                // conn.invalidate();
+                conn.poison();
+            } else {
+                conn.mark_clean();
             }
             Err(err)
         } else {
+            conn.mark_clean();
             Ok(true)
         }
     }

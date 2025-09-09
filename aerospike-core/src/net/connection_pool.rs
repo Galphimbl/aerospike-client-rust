@@ -217,13 +217,13 @@ pub struct PooledConnection {
 }
 
 impl PooledConnection {
-    // pub fn invalidate(mut self) {
-    //     let conn = self.conn.take().unwrap();
-    //     let queue = self.queue.clone();
-    //     aerospike_rt::spawn(async move {
-    //         queue.drop_conn(conn).await;
-    //     });
-    // }
+    pub fn invalidate(mut self) {
+        let conn = self.conn.take().unwrap();
+        let queue = self.queue.clone();
+        aerospike_rt::spawn(async move {
+            queue.drop_conn(conn).await;
+        });
+    }
     // Call at the start of every command
     pub fn guard(&mut self) -> ConnGuard<'_> {
         self.dirty = true;
