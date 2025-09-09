@@ -119,39 +119,39 @@ impl<'a> BatchOperateCommand<'a> {
                     continue;
                 }
             };
-            let _guard = conn.guard();
-            self.prepare_buffer(&mut conn)
+            let mut guard = conn.guard();
+            self.prepare_buffer(guard.conn())
                 .await
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
-            self.write_timeout(&mut conn, base_policy.total_timeout())
+            self.write_timeout(guard.conn(), base_policy.total_timeout())
                 .await
                 .map_err(|e| e.chain_error("Failed to set timeout for send buffer"))?;
 
             // Send command.
-            if let Err(err) = self.write_buffer(&mut conn).await {
+            if let Err(err) = self.write_buffer(guard.conn()).await {
                 // IO errors are considered temporary anomalies. Retry.
                 // Close socket to flush out possible garbage. Do not put back in pool.
                 // conn.invalidate();
-                conn.poison();
+                guard.poison();
                 warn!("Node {}: {}", self.node, err);
                 continue;
             }
 
             // Parse results.
-            if let Err(err) = Self::parse_result(&mut self.batch_ops, &mut conn).await {
+            if let Err(err) = Self::parse_result(&mut self.batch_ops, guard.conn()).await {
                 // close the connection
                 // cancelling/closing the batch/multi commands will return an error, which will
                 // close the connection to throw away its data and signal the server about the
                 // situation. We will not put back the connection in the buffer.
                 if !commands::keep_connection(&err) {
                     // conn.invalidate();
-                    conn.poison();
+                    guard.poison();
                 } else {
-                    conn.mark_clean();
+                    guard.mark_clean();
                 }
                 return Err(err);
             }
-            conn.mark_clean();
+            guard.mark_clean();
             // command has completed successfully.  Exit method.
             return Ok(self);
         }
@@ -175,32 +175,32 @@ impl<'a> BatchOperateCommand<'a> {
             .map_err(|_| Error::ClientError("Failed to prepare send buffer".into()))?;
 
         conn.buffer.write_timeout(policy.base().total_timeout());
-        let _guard = conn.guard();
+        let mut guard = conn.guard();
         // Send command.
-        if let Err(err) = conn.flush().await {
+        if let Err(err) = guard.conn().flush().await {
             // IO errors are considered temporary anomalies. Retry.
             // Close socket to flush out possible garbage. Do not put back in pool.
             // conn.invalidate();
-            conn.poison();
+            guard.poison();
             warn!("Node {}: {}", node, err);
             return Ok(false);
         }
 
         // Parse results.
-        if let Err(err) = Self::parse_result(batch_ops, &mut conn).await {
+        if let Err(err) = Self::parse_result(batch_ops, guard.conn()).await {
             // close the connection
             // cancelling/closing the batch/multi commands will return an error, which will
             // close the connection to throw away its data and signal the server about the
             // situation. We will not put back the connection in the buffer.
             if !commands::keep_connection(&err) {
                 // conn.invalidate();
-                conn.poison();
+                guard.poison();
             } else {
-                conn.mark_clean();
+                guard.mark_clean();
             }
             Err(err)
         } else {
-            conn.mark_clean();
+            guard.mark_clean();
             Ok(true)
         }
     }

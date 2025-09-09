@@ -127,39 +127,39 @@ impl<'a> SingleCommand<'a> {
                     continue;
                 }
             };
-            let _guard = conn.guard();
-            cmd.prepare_buffer(&mut conn)
+            let mut guard = conn.guard();
+            cmd.prepare_buffer(guard.conn())
                 .await
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
-            cmd.write_timeout(&mut conn, policy.total_timeout())
+            cmd.write_timeout(guard.conn(), policy.total_timeout())
                 .await
                 .map_err(|e| e.chain_error("Failed to set timeout for send buffer"))?;
 
             // Send command.
-            if let Err(err) = cmd.write_buffer(&mut conn).await {
+            if let Err(err) = cmd.write_buffer(guard.conn()).await {
                 // IO errors are considered temporary anomalies. Retry.
                 // Close socket to flush out possible garbage. Do not put back in pool.
                 // conn.invalidate();
-                conn.poison();
+                guard.poison();
                 warn!("Node {}: {}", node, err);
                 continue;
             }
 
             // Parse results.
-            if let Err(err) = cmd.parse_result(&mut conn).await {
+            if let Err(err) = cmd.parse_result(guard.conn()).await {
                 // close the connection
                 // cancelling/closing the batch/multi commands will return an error, which will
                 // close the connection to throw away its data and signal the server about the
                 // situation. We will not put back the connection in the buffer.
                 if !commands::keep_connection(&err) {
                     // conn.invalidate();
-                    conn.poison();
+                    guard.poison();
                 } else {
-                    conn.mark_clean();
+                    guard.mark_clean();
                 }
                 return Err(err);
             }
-            conn.mark_clean();
+            guard.mark_clean();
             // command has completed successfully.  Exit method.
             return Ok(());
         }

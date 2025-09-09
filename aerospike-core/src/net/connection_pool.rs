@@ -241,6 +241,18 @@ impl PooledConnection {
 pub struct ConnGuard<'a> {
     pc: &'a mut PooledConnection,
 }
+impl ConnGuard<'_> {
+    pub fn conn(&mut self) -> &mut PooledConnection {
+        &mut self.pc
+    }
+    pub fn mark_clean(&mut self) {
+        self.pc.mark_clean();
+    }
+    // Call on any io/parse error you can't prove left us at a frame boundary
+    pub fn poison(&mut self) {
+        self.pc.poison();
+    }
+}
 impl Drop for ConnGuard<'_> {
     fn drop(&mut self) {
         // If the command future was cancelled/timed out, we never called mark_clean()
