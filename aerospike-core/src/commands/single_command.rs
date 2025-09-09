@@ -97,7 +97,8 @@ impl<'a> SingleCommand<'a> {
 
             // check for max retries
             if let Some(max_retries) = policy.max_retries() {
-                if iterations > max_retries + 1 {  // first attempt isn't a retry
+                if iterations > max_retries + 1 {
+                    // first attempt isn't a retry
                     return Err(Error::Connection(format!(
                         "Timeout after {} tries",
                         iterations
@@ -126,7 +127,7 @@ impl<'a> SingleCommand<'a> {
                     continue;
                 }
             };
-
+            let _guard = conn.guard();
             cmd.prepare_buffer(&mut conn)
                 .await
                 .map_err(|e| e.chain_error("Failed to prepare send buffer"))?;
@@ -138,7 +139,8 @@ impl<'a> SingleCommand<'a> {
             if let Err(err) = cmd.write_buffer(&mut conn).await {
                 // IO errors are considered temporary anomalies. Retry.
                 // Close socket to flush out possible garbage. Do not put back in pool.
-                conn.invalidate();
+                // conn.invalidate();
+                conn.poison();
                 warn!("Node {}: {}", node, err);
                 continue;
             }
@@ -150,11 +152,14 @@ impl<'a> SingleCommand<'a> {
                 // close the connection to throw away its data and signal the server about the
                 // situation. We will not put back the connection in the buffer.
                 if !commands::keep_connection(&err) {
-                    conn.invalidate();
+                    // conn.invalidate();
+                    conn.poison();
+                } else {
+                    conn.mark_clean();
                 }
                 return Err(err);
             }
-
+            conn.mark_clean();
             // command has completed successfully.  Exit method.
             return Ok(());
         }

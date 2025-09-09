@@ -105,6 +105,8 @@ impl Queue {
         Ok(PooledConnection {
             queue: self.clone(),
             conn: Some(connection),
+            dirty: false,
+            must_close: false,
         })
     }
 
@@ -210,19 +212,64 @@ impl ConnectionPool {
 pub struct PooledConnection {
     queue: Queue,
     pub conn: Option<Connection>,
+    dirty: bool,      // request started but frame not fully drained
+    must_close: bool, // set when dirty at guard drop or on any parse/io error
 }
 
 impl PooledConnection {
-    pub fn invalidate(mut self) {
-        let conn = self.conn.take().unwrap();
-        block_on(self.queue.drop_conn(conn));
+    // pub fn invalidate(mut self) {
+    //     let conn = self.conn.take().unwrap();
+    //     let queue = self.queue.clone();
+    //     aerospike_rt::spawn(async move {
+    //         queue.drop_conn(conn).await;
+    //     });
+    // }
+    // Call at the start of every command
+    pub fn guard(&mut self) -> ConnGuard<'_> {
+        self.dirty = true;
+        ConnGuard { pc: self }
+    }
+    // Call once the full frame (header+body) is consumed successfully
+    pub fn mark_clean(&mut self) {
+        self.dirty = false;
+    }
+    // Call on any io/parse error you can't prove left us at a frame boundary
+    pub fn poison(&mut self) {
+        self.must_close = true;
+    }
+}
+pub struct ConnGuard<'a> {
+    pc: &'a mut PooledConnection,
+}
+impl Drop for ConnGuard<'_> {
+    fn drop(&mut self) {
+        // If the command future was cancelled/timed out, we never called mark_clean()
+        if self.pc.dirty {
+            self.pc.mustx_close = true; // ensure socket won't be returned to pool
+        }
     }
 }
 
 impl Drop for PooledConnection {
+    // fn drop(&mut self) {
+    //     if let Some(conn) = self.conn.take() {
+    //         block_on(self.queue.put_back(conn));
+    //     }
+    // }
     fn drop(&mut self) {
         if let Some(conn) = self.conn.take() {
-            block_on(self.queue.put_back(conn));
+            // Never block in Drop. Spawn the async put/close.
+            let queue = self.queue.clone();
+            if self.must_close {
+                // close + decrement pool count
+                aerospike_rt::spawn(async move {
+                    queue.drop_conn(conn).await;
+                });
+            } else {
+                aerospike_rt::spawn(async move {
+                    queue.put_back(conn).await;
+                });
+            }
         }
     }
 }
