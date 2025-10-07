@@ -112,12 +112,14 @@ impl Queue {
 
     pub async fn put_back(&self, mut conn: Connection) {
         let mut internals = self.0.internals.lock().await;
-        if internals.num_conns < self.0.capacity {
+        let idle = internals.connections.len();
+        if idle < self.0.capacity {
             internals.connections.push_back(IdleConnection(conn));
         } else {
             log::warn!("Connection pool is full, closing connection");
-            conn.close().await;
             internals.num_conns -= 1;
+            drop(internals);
+            conn.close().await;
         }
     }
 
